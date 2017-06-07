@@ -3,10 +3,13 @@
 #include <cstdio>
 #include <string>
 #include <cstdlib>
+#include <algorithm>
 
 jack_port_t *inPort;
 jack_port_t *outPort;
 jack_client_t *jackClient;
+jack_nframes_t meanSamplesCount = 128;
+jack_default_audio_sample_t meanWindow[129];
 
 int processAudio(jack_nframes_t nframes, void *arg) {
 	jack_default_audio_sample_t *inBuffer, *outBuffer;
@@ -14,13 +17,22 @@ int processAudio(jack_nframes_t nframes, void *arg) {
 	outBuffer = (jack_default_audio_sample_t *)jack_port_get_buffer(outPort, nframes);
 
 	jack_default_audio_sample_t sampleSum = 0;
-	jack_default_audio_sample_t sampleMax = 0;
-	for(jack_nframes_t i = 0; i < nframes; i++) {
-		sampleSum += inBuffer[i];
-		sampleMax = inBuffer[i] > sampleMax ? inBuffer[i] : sampleMax;
+	jack_nframes_t i = 0, j = 0;
+	while(i < nframes) {
+		sampleSum = 0.0;
+		for(j = 0; j < meanSamplesCount; j++) {
+			sampleSum += meanWindow[j];
+			meanWindow[j] = meanWindow[j + 1];
+		}
+		outBuffer[i] = sampleSum / meanSamplesCount;
+		meanWindow[meanSamplesCount] = inBuffer[i];
+		i++;
 	}
+
 	//printf("\r% .5f", sampleSum / nframes);
-	printf("\r% .5f", sampleMax);
+	//printf("\r% .5f", sampleMax);
+	//printf("\r%d", nframes);
+
 	return 0;
 }
 
@@ -43,8 +55,10 @@ int main(int argc, char** argv) {
 
 	std::printf(
 		"Jack audio properties:\n"\
-		"Sample rate: %d\n",
-		jack_get_sample_rate(jackClient)
+		"Sample rate: %d\n"\
+		"Buffer size: %d\n",
+		jack_get_sample_rate(jackClient),
+		jack_get_buffer_size(jackClient)
 	);
 
 	inPort = jack_port_register(
