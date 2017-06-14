@@ -5,27 +5,22 @@
 #include <cstdlib>
 #include <algorithm>
 
+#include "biquadfilter.h"
+
 jack_port_t *inPort;
 jack_port_t *outPort;
 jack_client_t *jackClient;
-jack_nframes_t meanSamplesCount = 128;
-jack_default_audio_sample_t meanWindow[129];
+
+Biquad *filter;
 
 int processAudio(jack_nframes_t nframes, void *arg) {
 	jack_default_audio_sample_t *inBuffer, *outBuffer;
 	inBuffer = (jack_default_audio_sample_t *)jack_port_get_buffer(inPort, nframes);
 	outBuffer = (jack_default_audio_sample_t *)jack_port_get_buffer(outPort, nframes);
 
-	jack_default_audio_sample_t sampleSum = 0;
-	jack_nframes_t i = 0, j = 0;
+	jack_nframes_t i = 0;
 	while(i < nframes) {
-		sampleSum = 0.0;
-		for(j = 0; j < meanSamplesCount; j++) {
-			sampleSum += meanWindow[j];
-			meanWindow[j] = meanWindow[j + 1];
-		}
-		outBuffer[i] = sampleSum / meanSamplesCount;
-		meanWindow[meanSamplesCount] = inBuffer[i];
+		outBuffer[i] = filter->process(inBuffer[i]);
 		i++;
 	}
 
@@ -76,6 +71,8 @@ int main(int argc, char** argv) {
 		0
 	);
 
+    filter = new Biquad();
+    filter->setBiquad(bq_type_lowpass, 300.0 / jack_get_sample_rate(jackClient), 0.7, 0);
 	jack_activate(jackClient);
 
 	getchar();
